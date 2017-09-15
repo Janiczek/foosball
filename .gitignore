@@ -1,2 +1,4 @@
 elm-stuff/
 resources/js/elm.js
+dist/
+node_modules/

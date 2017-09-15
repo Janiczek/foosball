@@ -162,7 +162,7 @@ pickSecond team2 model =
             { model | matchStatus = AwaitingResult team1 team2 }
 
         _ ->
-            Debug.crash "??? pickSecond"
+            model
 
 
 setWinner : Team -> Model -> Model
@@ -182,7 +182,7 @@ setWinner winningTeam model =
                 }
 
         _ ->
-            Debug.crash "??? setWinner"
+            model
 
 
 
@@ -217,7 +217,11 @@ viewHeader model =
                 [ H.button
                     [ HA.class "button--new-match"
                     , HE.onClick StartPicking
-                    , HA.disabled (not atLeastTwoTeams || model.matchStatus /= NotPicking)
+                    , HA.disabled
+                        ((not atLeastTwoTeams)
+                            || (model.matchStatus /= NotPicking)
+                            || (List.length (toDo model.teams model.matches) == 0)
+                        )
                     ]
                     [ H.text "Nový zápas" ]
                 ]
