@@ -3,7 +3,7 @@
     "elm-dev-env": "^1.1.3"
   },
   "scripts": {
-    "build": "elm-dev build",
+    "build": "elm-dev build && mv dist docs",
     "start": "elm-dev start"
   }
 }
