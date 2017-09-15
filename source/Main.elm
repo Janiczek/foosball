@@ -207,9 +207,9 @@ viewHeader model =
     in
         H.div [ HA.class "header" ]
             [ H.div [ HA.class "header__column" ]
-                [ H.h1 [] [ H.text "ShipIt fotbálkový turnaj" ]
+                [ H.h1 [] [ H.text "Foosball Leaderboard" ]
                 , H.div [ HA.class "subheading" ]
-                    [ H.span [ HA.class "date" ] [ H.text "21-22. září 2017" ]
+                    [ H.span [ HA.class "date" ] [ H.text "2017/09/21-22" ]
                     , H.span [ HA.class "format" ] [ H.text "2v2" ]
                     ]
                 ]
@@ -223,7 +223,7 @@ viewHeader model =
                             || (List.length (toDo model.teams model.matches) == 0)
                         )
                     ]
-                    [ H.text "Nový zápas" ]
+                    [ H.text "New Match" ]
                 ]
             ]
 
@@ -283,32 +283,32 @@ viewTeam matchStatus teams matches { isWinning, isNext, name, wins, losses, matc
             [ viewTeamColumn "team"
                 (case matchStatus of
                     NotPicking ->
-                        "Tým"
+                        "Team"
 
                     PickingFirst ->
                         if isInMatch then
-                            "Vyber tým 1"
+                            "Pick Team 1"
                         else
-                            "Už odehrál"
+                            "Already played"
 
                     PickingSecond team1 ->
                         if name == team1 then
-                            "Tým 1"
+                            "Team 1"
                         else if isInMatch then
-                            "Vyber tým 2"
+                            "Pick Team 2"
                         else
-                            "Už odehrál"
+                            "Already played"
 
                     AwaitingResult team1 team2 ->
                         if name == team1 || name == team2 then
-                            "Kdo vyhrál?"
+                            "Who won?"
                         else
-                            "Teď nehraje"
+                            "Not playing"
                 )
                 name
-            , viewTeamColumn "wins" "Výhry" (toString wins)
-            , viewTeamColumn "losses" "Prohry" (toString losses)
-            , viewTeamColumn "left" "Zbývá zápasů" (toString matchesLeft)
+            , viewTeamColumn "wins" "Wins" (toString wins)
+            , viewTeamColumn "losses" "Losses" (toString losses)
+            , viewTeamColumn "left" "Matches left" (toString matchesLeft)
             ]
 
 
@@ -371,7 +371,7 @@ viewNewTeam inputValue teams =
         H.div
             [ HA.class "team team--new" ]
             [ H.div [ HA.class "column column--team" ]
-                [ H.div [ HA.class "label" ] [ H.text "Nový tým" ]
+                [ H.div [ HA.class "label" ] [ H.text "New Team" ]
                 , H.div [ HA.class <| "value value--team" ]
                     [ H.input
                         [ HA.id newTeamId
@@ -392,7 +392,7 @@ viewNewTeam inputValue teams =
                         , HA.disabled isDisabled
                         , HA.class "button--add-team"
                         ]
-                        [ H.text "Přidej" ]
+                        [ H.text "Add" ]
                     ]
                 ]
             ]
