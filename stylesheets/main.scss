@@ -1,0 +1,291 @@
+@import url('https://fonts.googleapis.com/css?family=Quicksand:300,400,500,700&subset=latin-ext');
+
+@mixin team-with-icon($url, $left) {
+  &::after {
+    content: url($url);
+    width: 5.5rem;
+    position: absolute;
+    left: $left;
+    animation: icon 2s ease infinite;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: url('../img/foosball.jpg') no-repeat center center fixed;
+  background-size: cover;
+  font-family: 'Quicksand';
+}
+
+body {
+  font-size: 16px;
+}
+
+.page {
+  margin: 2.75rem auto 0;
+  width: 71.125rem;
+  filter: drop-shadow(0 0 2.1875rem rgba(0,0,0,0.35));
+}
+
+.header {
+  background: #f5f5f5;
+  width: 71.125rem;
+  height: 8.75rem;
+  display: flex;
+  align-items: center;
+  padding: 0 2.75rem;
+  justify-content: space-between;
+}
+
+.header__column {
+  display: flex;
+  flex-direction: column;
+}
+
+button {
+  font-size: 1.75rem;
+  text-transform: uppercase;
+  border: 0.125rem solid #e5e5e5;
+  font-family: 'Quicksand';
+  font-weight: 500;
+  transition: color 0.2s, opacity 0.1s;
+  position: relative;
+  overflow: hidden;
+  opacity: 1;
+  transform: perspective(0.0625rem) translateZ(0);
+
+  &:not([disabled]) {
+    &:hover {
+      color: #f5f5f5;
+
+      &::before {
+        transform: scale(2);
+      }
+    }
+
+    &:active {
+      opacity: 0.75;
+    }
+
+    &::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      border-radius: 100%;
+      vertical-align: middle;
+      background: linear-gradient(to right, #F14A4A, #F04A7D);
+      transition: transform ease-out 0.2s;
+      transform: scale(0);
+      z-index: -1;
+    }
+  }
+
+
+  &:focus {
+    outline: 0;
+  }
+}
+
+.button--new-match {
+  padding: 1.75rem;
+}
+
+.date,
+.format,
+.label {
+  color: #98898c;
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: .25rem;
+}
+
+.date:after {
+  color: #f14b65;
+  content: "•";
+  padding: 0 0.875rem;
+  font-size: 1.3125rem;
+}
+
+h1 {
+  padding: 0;
+  margin: 0;
+  font-size: 2.625rem;
+  font-weight: 500;
+}
+
+.header-bottom {
+  content: "";
+  width: 71.125rem;
+  height: 0;
+  border-left: 2.75rem solid transparent;
+  border-right: 2.75rem solid transparent;
+  border-top: 2.1875rem solid rgba(0,0,0,0.25);
+}
+
+.teams {
+  width: 65.625rem;
+  margin: 0 auto;
+  background: #f5f5f5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.teams--picking {
+  .team:not(.team--not-in-match):not(.team--new):hover {
+    background: #e3e3e3;
+    .value,
+    .label {
+      animation: pulsate 1s ease infinite;
+    }
+  }
+}
+
+.team {
+  width: 65.625rem;
+  height: 7.125rem;
+  display: flex;
+  align-items: center;
+  padding: 0 3.0625rem;
+  justify-content: space-between;
+  position: relative;
+  background: #f5f5f5;
+  transition: background 0.2s;
+
+  &:hover {
+    &.team--winning {
+      background: rgba(3,0,1,0.86);
+    }
+    &:not(.team--winning) {
+      background: #f0f0f0;
+    }
+  }
+
+  &:not(:first-child)::before {
+    content: "";
+    position: absolute;
+    top: -0.0625rem;
+    left: 0;
+    right: 0;
+    margin: 0 auto;
+    height: 0.125rem;
+    background: #e5e5e5;
+    width: 59.5rem;
+  }
+}
+
+.team--winning {
+  width: 71.125rem;
+  background: rgba(3,0,1,0.76);
+  padding: 0 5.8125rem; /* whatever .team has + 2.75rem */
+
+  @include team-with-icon('../img/trophy.svg', -1.375rem);
+}
+
+.team--next {
+  @include team-with-icon('../img/start.svg', -4.125rem);
+}
+
+.team--not-in-match {
+  .label,
+  .value {
+    color: #ddd;
+    background: transparent;
+    -webkit-background-clip: initial;
+  }
+}
+
+@keyframes icon {
+  0%, 100% { transform: rotate(-17.5deg); }
+  50%      { transform: rotate(17.5deg); }
+}
+
+@keyframes pulsate {
+  0%, 100% { transform: scale(0.95); }
+  50%      { transform: scale(1.05); }
+}
+
+.column--team {
+  width: 17.5rem;
+}
+
+.date,
+.label {
+  text-transform: uppercase;
+}
+
+.value {
+  font-size: 2.1875rem;
+  font-weight: 500;
+}
+
+.value--team,
+.value--left,
+button {
+  background: linear-gradient(to right, #F14A4A, #F04A7D);
+  color: transparent;
+  -webkit-background-clip: text;
+}
+
+.value--left {
+  text-align: right;
+}
+
+.team--winning .value--wins,
+.team--winning .value--losses {
+  color: #f5f5f5;
+}
+
+.team--winning::before,
+.team--winning + .team::before {
+  display: none;
+}
+
+.column--button {
+  width: 35rem;
+}
+
+input {
+  font-size: 1.75rem;
+  font-family: 'Quicksand';
+  font-weight: 500;
+  background: #e0e0e0;
+  border: none;
+  padding: 0.4375rem;
+  transition: background 0.2s;
+
+  &:focus {
+    outline: 0;
+  }
+
+  &:hover,
+  &:focus {
+    background: #e4e4e4;
+  }
+}
+
+.input--team {
+}
+
+.value--button {
+  height: 4.5625rem;
+  display: flex;
+  align-items: flex-end;
+}
+
+.button--add-team {
+  height: 3.1875rem;
+  padding: 0 1rem;
+}
+
+button[disabled] {
+  color: #e0e0e0;
+  background: transparent;
+  -webkit-background-clip: initial;
+}
