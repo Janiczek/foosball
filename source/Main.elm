@@ -592,7 +592,61 @@ teamsInfo { teams, matches } =
                 |> Set.toList
                 |> List.map (countMatches leftToDo)
                 |> Dict.fromList
+    in
+        teams
+            |> Set.toList
+            |> List.map
+                (\team ->
+                    { name = team
+                    , isWinning =
+                        isWinning
+                            leftToDo
+                            teams
+                            matches
+                            team
+                    , isNext =
+                        isNext
+                            (teamToDoCount countsLeft team)
+                            (nextTeams leftToDo countsLeft)
+                            team
+                    , wins = wins team matches
+                    , losses = losses team matches
+                    , matchesLeft = teamToDoCount countsLeft team
+                    }
+                )
 
+
+nextTeams : List ( Team, Team ) -> Dict Team Int -> Maybe ( Team, Team )
+nextTeams leftToDo countsLeft =
+    let
+        allNextTeams =
+            leftToDo
+                |> List.map
+                    (\( team1, team2 ) ->
+                        ( ( team1, teamToDoCount countsLeft team1 )
+                        , ( team2, teamToDoCount countsLeft team2 )
+                        )
+                    )
+                |> List.sortBy (\( ( t1, s1 ), ( t2, s2 ) ) -> (s1 + s2) // 2)
+    in
+        case allNextTeams of
+            ( ( t1, s1 ), ( t2, s2 ) ) :: _ ->
+                Just ( t1, t2 )
+
+            _ ->
+                Nothing
+
+
+teamToDoCount : Dict Team Int -> Team -> Int
+teamToDoCount countsLeft team =
+    countsLeft
+        |> Dict.get team
+        |> Maybe.withDefault 0
+
+
+isWinning : List ( Team, Team ) -> Set Team -> List Match -> Team -> Bool
+isWinning leftToDo teams matches team =
+    let
         teamWins : List ( Team, Int )
         teamWins =
             teams
@@ -622,58 +676,18 @@ teamsInfo { teams, matches } =
                 teamWins
                     |> List.head
                     |> Maybe.map Tuple.first
-
-        allNextTeams : List ( ( Team, Int ), ( Team, Int ) )
-        allNextTeams =
-            leftToDo
-                |> List.map
-                    (\( team1, team2 ) ->
-                        ( ( team1, teamToDoCount countsLeft team1 )
-                        , ( team2, teamToDoCount countsLeft team2 )
-                        )
-                    )
-                |> List.sortBy (\( ( t1, s1 ), ( t2, s2 ) ) -> (s1 + s2) // 2)
-
-        nextTeams : Maybe ( Team, Team )
-        nextTeams =
-            case allNextTeams of
-                ( ( t1, s1 ), ( t2, s2 ) ) :: _ ->
-                    Just ( t1, t2 )
-
-                _ ->
-                    Nothing
     in
-        teams
-            |> Set.toList
-            |> List.map
-                (\team ->
-                    { name = team
-                    , isWinning = isWinning leftToDo winningTeam team
-                    , isNext = isNext (teamToDoCount countsLeft team) nextTeams team
-                    , wins = wins team matches
-                    , losses = losses team matches
-                    , matchesLeft = teamToDoCount countsLeft team
-                    }
-                )
-
-
-teamToDoCount : Dict Team Int -> Team -> Int
-teamToDoCount countsLeft team =
-    countsLeft
-        |> Dict.get team
-        |> Maybe.withDefault 0
-
-
-isWinning : List ( Team, Team ) -> Maybe Team -> Team -> Bool
-isWinning leftToDo winningTeam team =
-    (List.length leftToDo == 0)
-        && (winningTeam == Just team)
+        List.isEmpty leftToDo
+            && (winningTeam == Just team)
 
 
 isNext : Int -> Maybe ( Team, Team ) -> Team -> Bool
 isNext matchesLeft nextTeams team =
-    (matchesLeft > 0)
-        && (nextTeams
-                |> Maybe.map (\( a, b ) -> a == team || b == team)
-                |> Maybe.withDefault False
-           )
+    matchesLeft > 0 && isInNextTeams team nextTeams
+
+
+isInNextTeams : Team -> Maybe ( Team, Team ) -> Bool
+isInNextTeams team nextTeams =
+    nextTeams
+        |> Maybe.map (\( a, b ) -> a == team || b == team)
+        |> Maybe.withDefault False
