@@ -22,45 +22,48 @@ main =
         }
 
 
+{-| Very high level overview:
+
+  - The user can add teams that will play in the tournament.
+  - The app wants everybody to play with everybody.
+  - The app tracks who has played with who.
+  - The user can add matches (pick first team, pick second team, pick the winner).
+  - After everybody has played with everybody, the game shows the result
+
+-}
+
+
+
+-- INIT
+
+
 type alias Model =
     { teams : Set Team
     , matches : List Match
-
-    -- inputs
-    , newTeamInput : String
     , matchStatus : MatchStatus
+    , newTeamInput : String
     }
+
+
+init : ( Model, Cmd Msg )
+init =
+    { teams = Set.empty
+    , matches = []
+    , matchStatus = NotPicking
+    , newTeamInput = ""
+    }
+        |> withCmd focusNewTeam
 
 
 type MatchStatus
     = NotPicking
     | PickingFirst
     | PickingSecond Team
-    | AwaitingResult Team Team
-
-
-type Msg
-    = NoOp
-    | SetNewTeamInput String
-    | AddTeam Team
-    | StartPicking
-    | PickFirst Team
-    | PickSecond Team
-    | SetWinner Team
+    | PickingWinner Team Team
 
 
 type alias Team =
     String
-
-
-type alias TeamInfo =
-    { name : String
-    , isWinning : Bool
-    , isNext : Bool
-    , wins : Int
-    , losses : Int
-    , matchesLeft : Int
-    }
 
 
 type alias Match =
@@ -71,24 +74,17 @@ type alias Score =
     Int
 
 
+
+-- SUBSCRIPTIONS
+
+
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.none
 
 
-init : ( Model, Cmd Msg )
-init =
-    { teams = Set.empty
-    , matches = []
-    , newTeamInput = ""
-    , matchStatus = NotPicking
-    }
-        |> withCmd focusNewTeam
 
-
-newTeamId : String
-newTeamId =
-    "new-team"
+-- CMDS
 
 
 focusNewTeam : Cmd Msg
@@ -97,92 +93,118 @@ focusNewTeam =
         |> Task.attempt (always NoOp)
 
 
+newTeamId : String
+newTeamId =
+    "new-team"
+
+
 
 -- UPDATE
+
+
+type Msg
+    = NoOp
+    | SetNewTeamInput String
+    | AddTeam Team
+    | StartPicking
+    | PickFirst Team
+    | PickSecond Team
+    | PickWinner Team
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         NoOp ->
-            model
-                |> withNoCmd
+            noOp model
 
         -- teams
         SetNewTeamInput value ->
             setNewTeamInput value model
-                |> withNoCmd
 
         AddTeam teamName ->
             addTeam teamName model
-                |> withCmd focusNewTeam
 
+        -- matches
         StartPicking ->
             startPicking model
-                |> withNoCmd
 
         PickFirst team ->
             pickFirst team model
-                |> withNoCmd
 
         PickSecond team ->
             pickSecond team model
-                |> withNoCmd
 
-        SetWinner team ->
-            setWinner team model
-                |> withNoCmd
+        PickWinner team ->
+            pickWinner team model
 
 
-setNewTeamInput : String -> Model -> Model
+{-| because of Dom.focus
+-}
+noOp : Model -> ( Model, Cmd Msg )
+noOp model =
+    model
+        |> withNoCmd
+
+
+setNewTeamInput : String -> Model -> ( Model, Cmd Msg )
 setNewTeamInput value model =
     { model | newTeamInput = value }
+        |> withNoCmd
 
 
-addTeam : String -> Model -> Model
+{-| add a new team, reset the input, focus the input again for faster writing
+-}
+addTeam : String -> Model -> ( Model, Cmd Msg )
 addTeam teamName model =
     { model | teams = Set.insert teamName model.teams }
         |> setNewTeamInput ""
+        |> addCmd focusNewTeam
 
 
-startPicking : Model -> Model
+{-| user clicked on "New Match", start the match input process
+
+That means:
+
+1.  (before anything) -- NotPicking
+2.  User clicks on New Match -- StartPicking
+3.  User clicks on a team 1 -- PickFirst
+4.  User clicks on a team 2 -- PickSecond
+5.  User clicks on a team that won -- PickWinner
+
+-}
+startPicking : Model -> ( Model, Cmd Msg )
 startPicking model =
     { model | matchStatus = PickingFirst }
+        |> withNoCmd
 
 
-pickFirst : Team -> Model -> Model
+pickFirst : Team -> Model -> ( Model, Cmd Msg )
 pickFirst team1 model =
     { model | matchStatus = PickingSecond team1 }
+        |> withNoCmd
 
 
-pickSecond : Team -> Model -> Model
+pickSecond : Team -> Model -> ( Model, Cmd Msg )
 pickSecond team2 model =
-    case model.matchStatus of
-        PickingSecond team1 ->
-            { model | matchStatus = AwaitingResult team1 team2 }
-
-        _ ->
-            model
+    team1Name model.matchStatus
+        |> Maybe.map (\team1 -> { model | matchStatus = PickingWinner team1 team2 })
+        |> Maybe.withDefault model
+        |> withNoCmd
 
 
-setWinner : Team -> Model -> Model
-setWinner winningTeam model =
-    case model.matchStatus of
-        AwaitingResult team1 team2 ->
-            let
-                ( score1, score2 ) =
-                    if team1 == winningTeam then
-                        ( 1, 0 )
-                    else
-                        ( 0, 1 )
-            in
+pickWinner : Team -> Model -> ( Model, Cmd Msg )
+pickWinner winningTeam model =
+    matchResult model.matchStatus winningTeam
+        |> Maybe.map
+            (\match ->
                 { model
                     | matchStatus = NotPicking
-                    , matches = ( ( team1, score1 ), ( team2, score2 ) ) :: model.matches
+                    , matches = match :: model.matches
                 }
-
-        _ ->
-            model
+            )
+        |> Maybe.withDefault model
+        |> withNoCmd
 
 
 
@@ -201,33 +223,47 @@ view model =
 
 viewHeader : Model -> Html Msg
 viewHeader model =
+    H.div [ HA.class "header" ]
+        [ H.div [ HA.class "header__column" ]
+            [ H.h1 [] [ H.text "Foosball Leaderboard" ]
+            , H.div [ HA.class "subheading" ]
+                [ H.span [ HA.class "date" ] [ H.text "2017/09/21-22" ]
+                , H.span [ HA.class "format" ] [ H.text "2v2" ]
+                ]
+            ]
+        , H.div [ HA.class "header__column" ] [ viewNewMatchButton model ]
+        ]
+
+
+viewNewMatchButton : Model -> Html Msg
+viewNewMatchButton model =
     let
         atLeastTwoTeams =
             Set.size model.teams >= 2
+
+        matchesToDo =
+            toDo model.teams model.matches
+
+        isDisabled =
+            -- not enough teams to play anything
+            not atLeastTwoTeams
+                -- already in the process of creating a match
+                || (model.matchStatus /= NotPicking)
+                -- no more matches to play
+                || List.isEmpty matchesToDo
     in
-        H.div [ HA.class "header" ]
-            [ H.div [ HA.class "header__column" ]
-                [ H.h1 [] [ H.text "Foosball Leaderboard" ]
-                , H.div [ HA.class "subheading" ]
-                    [ H.span [ HA.class "date" ] [ H.text "2017/09/21-22" ]
-                    , H.span [ HA.class "format" ] [ H.text "2v2" ]
-                    ]
-                ]
-            , H.div [ HA.class "header__column" ]
-                [ H.button
-                    [ HA.class "button--new-match"
-                    , HE.onClick StartPicking
-                    , HA.disabled
-                        ((not atLeastTwoTeams)
-                            || (model.matchStatus /= NotPicking)
-                            || (List.length (toDo model.teams model.matches) == 0)
-                        )
-                    ]
-                    [ H.text "New Match" ]
-                ]
+        H.button
+            [ HA.class "button--new-match"
+            , HE.onClick StartPicking
+            , HA.disabled isDisabled
             ]
+            [ H.text "New Match" ]
 
 
+{-| This is the dark shape connecting the header and the teams list.
+Maybe it can be done with ::before or ::after?
+Don't know, don't care anymore :) It works!
+-}
 viewHeaderBottom : Html Msg
 viewHeaderBottom =
     H.div [ HA.class "header-bottom" ] []
@@ -235,122 +271,111 @@ viewHeaderBottom =
 
 viewTeams : Model -> Html Msg
 viewTeams model =
-    let
-        teams =
-            teamsInfo model
-    in
-        H.div
-            [ HA.classList
-                [ ( "teams", True )
-                , ( "teams--picking", model.matchStatus /= NotPicking )
-                ]
+    H.div
+        [ HA.classList
+            [ ( "teams", True )
+
+            -- when picking teams in a match, they will pulsate on hover
+            , ( "teams--picking", model.matchStatus /= NotPicking )
             ]
-        <|
-            (List.map (viewTeam model.matchStatus model.teams model.matches) teams)
-                ++ [ viewNewTeam model.newTeamInput model.teams ]
+        ]
+    <|
+        (List.map (viewTeam model) (teamsInfo model))
+            ++ [ viewNewTeam model.newTeamInput model.teams ]
 
 
-viewTeam : MatchStatus -> Set Team -> List Match -> TeamInfo -> Html Msg
-viewTeam matchStatus teams matches { isWinning, isNext, name, wins, losses, matchesLeft } =
+isInMatch : Model -> Team -> Bool
+isInMatch { matchStatus, teams, matches } name =
+    case matchStatus of
+        NotPicking ->
+            False
+
+        PickingFirst ->
+            -- pick anybody ('A') that still has some matches to play
+            canPickFirst name (toDo teams matches)
+
+        PickingSecond team1 ->
+            -- pick anybody ('B') that has to play against A
+            name /= team1 && canPickSecond name team1 (toDo teams matches)
+
+        PickingWinner team1 team2 ->
+            -- pick either A or B
+            name == team1 || name == team2
+
+
+teamLabel : Model -> Team -> String
+teamLabel model name =
+    case model.matchStatus of
+        NotPicking ->
+            "Team"
+
+        PickingFirst ->
+            if isInMatch model name then
+                "Pick Team 1"
+            else
+                "Already played"
+
+        PickingSecond team1 ->
+            if name == team1 then
+                "Team 1"
+            else if isInMatch model name then
+                "Pick Team 2"
+            else
+                "Already played"
+
+        PickingWinner team1 team2 ->
+            if name == team1 || name == team2 then
+                "Who won?"
+            else
+                "Not playing"
+
+
+viewTeam : Model -> TeamInfo -> Html Msg
+viewTeam model { isWinning, isNext, name, wins, losses, matchesLeft } =
     let
-        leftToDo =
-            toDo teams matches
-
-        ( isPicking, disableSomeTeams, isInMatch ) =
-            case matchStatus of
-                NotPicking ->
-                    ( False, False, False )
-
-                PickingFirst ->
-                    ( True, True, canPickFirst name leftToDo )
-
-                PickingSecond team1 ->
-                    ( True, True, name /= team1 && canPickSecond name team1 leftToDo )
-
-                AwaitingResult team1 team2 ->
-                    ( True, True, name == team1 || name == team2 )
+        isPicking =
+            model.matchStatus /= NotPicking
     in
         H.div
-            (maybeClickableTeam name matchStatus teams matches
+            (teamAttributes name model
                 ++ [ HA.classList
                         [ ( "team", True )
                         , ( "team--winning", not isPicking && isWinning )
                         , ( "team--next", not isPicking && isNext )
-                        , ( "team--not-in-match", disableSomeTeams && not isInMatch )
+                        , ( "team--not-in-match", isPicking && not (isInMatch model name) )
                         ]
                    ]
             )
-            [ viewTeamColumn "team"
-                (case matchStatus of
-                    NotPicking ->
-                        "Team"
-
-                    PickingFirst ->
-                        if isInMatch then
-                            "Pick Team 1"
-                        else
-                            "Already played"
-
-                    PickingSecond team1 ->
-                        if name == team1 then
-                            "Team 1"
-                        else if isInMatch then
-                            "Pick Team 2"
-                        else
-                            "Already played"
-
-                    AwaitingResult team1 team2 ->
-                        if name == team1 || name == team2 then
-                            "Who won?"
-                        else
-                            "Not playing"
-                )
-                name
+            [ viewTeamColumn "team" (teamLabel model name) name
             , viewTeamColumn "wins" "Wins" (toString wins)
             , viewTeamColumn "losses" "Losses" (toString losses)
             , viewTeamColumn "left" "Matches left" (toString matchesLeft)
             ]
 
 
-maybeClickableTeam : Team -> MatchStatus -> Set Team -> List Match -> List (Attribute Msg)
-maybeClickableTeam team matchStatus teams matches =
-    let
-        leftToDo =
-            toDo teams matches
-    in
-        case matchStatus of
-            NotPicking ->
+teamAttributes : Team -> Model -> List (Attribute Msg)
+teamAttributes team { matchStatus, teams, matches } =
+    case matchStatus of
+        NotPicking ->
+            []
+
+        PickingFirst ->
+            if canPickFirst team (toDo teams matches) then
+                [ HE.onClick (PickFirst team) ]
+            else
                 []
 
-            PickingFirst ->
-                if canPickFirst team leftToDo then
-                    [ HE.onClick (PickFirst team) ]
-                else
-                    []
+        PickingSecond team1 ->
+            if team /= team1 && canPickSecond team team1 (toDo teams matches) then
+                [ HE.onClick (PickSecond team) ]
+            else
+                []
 
-            PickingSecond team1 ->
-                if team /= team1 && canPickSecond team team1 leftToDo then
-                    [ HE.onClick (PickSecond team) ]
-                else
-                    []
-
-            AwaitingResult team1 team2 ->
-                if team == team1 || team == team2 then
-                    [ HE.onClick (SetWinner team) ]
-                else
-                    []
-
-
-canPickFirst : Team -> List ( Team, Team ) -> Bool
-canPickFirst team leftToDo =
-    leftToDo
-        |> List.any (\( t1, t2 ) -> t1 == team || t2 == team)
-
-
-canPickSecond : Team -> Team -> List ( Team, Team ) -> Bool
-canPickSecond team team1 leftToDo =
-    leftToDo
-        |> List.any (\( t1, t2 ) -> (t1 == team1 && t2 == team) || (t2 == team1 && t1 == team))
+        PickingWinner team1 team2 ->
+            if team == team1 || team == team2 then
+                [ HE.onClick (PickWinner team) ]
+            else
+                []
 
 
 viewTeamColumn : String -> String -> String -> Html Msg
@@ -363,82 +388,195 @@ viewTeamColumn classSuffix label value =
 
 viewNewTeam : String -> Set Team -> Html Msg
 viewNewTeam inputValue teams =
-    let
-        isDisabled =
-            String.isEmpty inputValue
-                || Set.member inputValue teams
-    in
-        H.div
-            [ HA.class "team team--new" ]
-            [ H.div [ HA.class "column column--team" ]
-                [ H.div [ HA.class "label" ] [ H.text "New Team" ]
-                , H.div [ HA.class <| "value value--team" ]
-                    [ H.input
-                        [ HA.id newTeamId
-                        , HE.onInput SetNewTeamInput
-                        , HE.onEnter (AddTeam inputValue)
-                        , HA.type_ "text"
-                        , HA.class "input--team"
-                        , HA.value inputValue
-                        ]
-                        []
-                    ]
+    H.div
+        [ HA.class "team team--new" ]
+        [ viewNewTeamInput inputValue
+        , viewNewTeamButton inputValue teams
+        ]
+
+
+viewNewTeamInput : String -> Html Msg
+viewNewTeamInput inputValue =
+    H.div [ HA.class "column column--team" ]
+        [ H.div [ HA.class "label" ] [ H.text "New Team" ]
+        , H.div [ HA.class <| "value value--team" ]
+            [ H.input
+                [ HA.id newTeamId
+                , HE.onInput SetNewTeamInput
+                , HE.onEnter (AddTeam inputValue)
+                , HA.type_ "text"
+                , HA.class "input--team"
+                , HA.value inputValue
                 ]
-            , H.div [ HA.class "column column--button" ]
-                [ H.div [ HA.class "label" ] []
-                , H.div [ HA.class <| "value value--button" ]
-                    [ H.button
-                        [ HE.onClick (AddTeam inputValue)
-                        , HA.disabled isDisabled
-                        , HA.class "button--add-team"
-                        ]
-                        [ H.text "Add" ]
-                    ]
-                ]
+                []
             ]
+        ]
+
+
+viewNewTeamButton : String -> Set Team -> Html Msg
+viewNewTeamButton inputValue teams =
+    H.div [ HA.class "column column--button" ]
+        [ H.div [ HA.class "label" ] []
+        , H.div [ HA.class <| "value value--button" ]
+            [ H.button
+                [ HE.onClick (AddTeam inputValue)
+                , HA.disabled (isNewTeamButtonDisabled inputValue teams)
+                , HA.class "button--add-team"
+                ]
+                [ H.text "Add" ]
+            ]
+        ]
+
+
+{-| Can't input empty name or name that is already present
+-}
+isNewTeamButtonDisabled : String -> Set Team -> Bool
+isNewTeamButtonDisabled inputValue teams =
+    String.isEmpty inputValue
+        || Set.member inputValue teams
 
 
 
--- HELPERS
+-- DERIVED DATA HELPERS
 
 
-normalizeMatch : ( comparable, comparable ) -> ( comparable, comparable )
-normalizeMatch ( a, b ) =
-    if a < b then
-        ( a, b )
+team1Name : MatchStatus -> Maybe String
+team1Name matchStatus =
+    case matchStatus of
+        NotPicking ->
+            Nothing
+
+        PickingFirst ->
+            Nothing
+
+        PickingSecond team1 ->
+            Just team1
+
+        PickingWinner team1 _ ->
+            Just team1
+
+
+matchResult : MatchStatus -> Team -> Maybe Match
+matchResult matchStatus winnerTeam =
+    case matchStatus of
+        NotPicking ->
+            Nothing
+
+        PickingFirst ->
+            Nothing
+
+        PickingSecond _ ->
+            Nothing
+
+        PickingWinner team1 team2 ->
+            let
+                ( score1, score2 ) =
+                    if winnerTeam == team1 then
+                        ( 1, 0 )
+                    else
+                        ( 0, 1 )
+            in
+                Just ( ( team1, score1 ), ( team2, score2 ) )
+
+
+{-| Team exists in matches left to play
+-}
+canPickFirst : Team -> List ( Team, Team ) -> Bool
+canPickFirst team leftToDo =
+    leftToDo
+        |> List.any (\( t1, t2 ) -> t1 == team || t2 == team)
+
+
+{-| Team exists in matches left to play with the team1
+-}
+canPickSecond : Team -> Team -> List ( Team, Team ) -> Bool
+canPickSecond team team1 leftToDo =
+    leftToDo
+        |> List.any (\( t1, t2 ) -> (t1 == team1 && t2 == team) || (t2 == team1 && t1 == team))
+
+
+{-| Sort teams inside the tuple (for List.unique filtering later). If only we had unordered tuples ;)
+
+Maybe refactor (Team, Team) into Set Team?
+
+-}
+normalizeTeams : ( Team, Team ) -> ( Team, Team )
+normalizeTeams ( team1, team2 ) =
+    if team1 < team2 then
+        ( team1, team2 )
     else
-        ( b, a )
+        ( team2, team1 )
 
 
-combinations : Set comparable -> List ( comparable, comparable )
-combinations set =
-    let
-        list =
-            Set.toList set
-    in
-        List.lift2 (,) list list
-            |> List.filter (\( a, b ) -> a /= b)
-            |> List.map normalizeMatch
-            |> List.unique
+{-|
+
+    combinations [1,2,3]   == [(1,2),(1,3),(2,3)]
+    combinations [1,2,3,4] == [(1,2),(1,3),(1,4),(2,3),(2,4),(3,4)]
+-}
+combinations : List Team -> List ( Team, Team )
+combinations list =
+    List.lift2 (,) list list
+        |> List.filter (\( a, b ) -> a /= b)
+        |> List.map normalizeTeams
+        |> List.unique
 
 
+{-| Matches still left to play.
+-}
 toDo : Set Team -> List Match -> List ( Team, Team )
 toDo teams matches =
     let
         allMatches : List ( Team, Team )
         allMatches =
-            combinations teams
+            teams
+                |> Set.toList
+                |> combinations
 
         done : List ( Team, Team )
         done =
             matches
                 |> List.map (\( ( t1, s1 ), ( t2, s2 ) ) -> ( t1, t2 ))
-                |> List.map normalizeMatch
+                |> List.map normalizeTeams
     in
         Set.diff
             (Set.fromList allMatches)
             (Set.fromList done)
             |> Set.toList
+
+
+wins : Team -> List Match -> Int
+wins team matches =
+    matches
+        |> List.filter (\( ( t1, s1 ), ( t2, s2 ) ) -> t1 == team && s1 > s2 || t2 == team && s2 > s1)
+        |> List.length
+
+
+losses : Team -> List Match -> Int
+losses team matches =
+    matches
+        |> List.filter (\( ( t1, s1 ), ( t2, s2 ) ) -> t1 == team && s1 < s2 || t2 == team && s2 < s1)
+        |> List.length
+
+
+countMatches : List ( Team, Team ) -> Team -> ( Team, Int )
+countMatches matches team =
+    let
+        count =
+            matches
+                |> List.filter (\( a, b ) -> a == team || b == team)
+                |> List.length
+    in
+        ( team, count )
+
+
+type alias TeamInfo =
+    { name : String
+    , isWinning : Bool
+    , isNext : Bool
+    , wins : Int
+    , losses : Int
+    , matchesLeft : Int
+    }
 
 
 teamsInfo : Model -> List TeamInfo
@@ -490,8 +628,8 @@ teamsInfo { teams, matches } =
             leftToDo
                 |> List.map
                     (\( team1, team2 ) ->
-                        ( ( team1, countsLeft |> Dict.get team1 |> Maybe.withDefault 0 )
-                        , ( team2, countsLeft |> Dict.get team2 |> Maybe.withDefault 0 )
+                        ( ( team1, teamToDoCount countsLeft team1 )
+                        , ( team2, teamToDoCount countsLeft team2 )
                         )
                     )
                 |> List.sortBy (\( ( t1, s1 ), ( t2, s2 ) ) -> (s1 + s2) // 2)
@@ -509,47 +647,33 @@ teamsInfo { teams, matches } =
             |> Set.toList
             |> List.map
                 (\team ->
-                    let
-                        matchesLeft =
-                            countsLeft
-                                |> Dict.get team
-                                |> Maybe.withDefault 0
-                    in
-                        { name = team
-                        , isWinning = List.length leftToDo == 0 && winningTeam == Just team
-                        , isNext =
-                            (matchesLeft > 0)
-                                && (nextTeams
-                                        |> Maybe.map (\( a, b ) -> a == team || b == team)
-                                        |> Maybe.withDefault False
-                                   )
-                        , wins = wins team matches
-                        , losses = losses team matches
-                        , matchesLeft = matchesLeft
-                        }
+                    { name = team
+                    , isWinning = isWinning leftToDo winningTeam team
+                    , isNext = isNext (teamToDoCount countsLeft team) nextTeams team
+                    , wins = wins team matches
+                    , losses = losses team matches
+                    , matchesLeft = teamToDoCount countsLeft team
+                    }
                 )
 
 
-wins : Team -> List Match -> Int
-wins team matches =
-    matches
-        |> List.filter (\( ( t1, s1 ), ( t2, s2 ) ) -> t1 == team && s1 > s2 || t2 == team && s2 > s1)
-        |> List.length
+teamToDoCount : Dict Team Int -> Team -> Int
+teamToDoCount countsLeft team =
+    countsLeft
+        |> Dict.get team
+        |> Maybe.withDefault 0
 
 
-losses : Team -> List Match -> Int
-losses team matches =
-    matches
-        |> List.filter (\( ( t1, s1 ), ( t2, s2 ) ) -> t1 == team && s1 < s2 || t2 == team && s2 < s1)
-        |> List.length
+isWinning : List ( Team, Team ) -> Maybe Team -> Team -> Bool
+isWinning leftToDo winningTeam team =
+    (List.length leftToDo == 0)
+        && (winningTeam == Just team)
 
 
-countMatches : List ( Team, Team ) -> Team -> ( Team, Int )
-countMatches matches team =
-    let
-        count =
-            matches
-                |> List.filter (\( a, b ) -> a == team || b == team)
-                |> List.length
-    in
-        ( team, count )
+isNext : Int -> Maybe ( Team, Team ) -> Team -> Bool
+isNext matchesLeft nextTeams team =
+    (matchesLeft > 0)
+        && (nextTeams
+                |> Maybe.map (\( a, b ) -> a == team || b == team)
+                |> Maybe.withDefault False
+           )
