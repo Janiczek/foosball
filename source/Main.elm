@@ -628,6 +628,7 @@ nextTeams leftToDo countsLeft =
                         )
                     )
                 |> List.sortBy (\( ( t1, s1 ), ( t2, s2 ) ) -> (s1 + s2) // 2)
+                |> List.reverse
     in
         case allNextTeams of
             ( ( t1, s1 ), ( t2, s2 ) ) :: _ ->
